@@ -81,18 +81,16 @@ export async function POST(request) {
     const data = await response.json();
     const generatedContent = data.choices[0]?.message?.content || 'No content generated';
 
-    // Increment usage count for paid plans
-    if (subscription.plan !== 'free') {
-      await supabaseService
-        .from('user_subscriptions')
-        .update({ generations_used: subscription.generations_used + 1 })
-        .eq('user_id', user.id);
-    }
+    // Increment usage count for ALL plans (including free)
+    await supabaseService
+      .from('user_subscriptions')
+      .update({ generations_used: subscription.generations_used + 1 })
+      .eq('user_id', user.id);
 
     return NextResponse.json({ 
       content: generatedContent,
       usage: {
-        used: subscription.plan !== 'free' ? subscription.generations_used + 1 : 0,
+        used: subscription.generations_used + 1,
         limit: subscription.generations_limit,
       }
     });
