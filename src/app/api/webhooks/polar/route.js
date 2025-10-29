@@ -15,10 +15,17 @@ export async function POST(request) {
     console.log('Full payload:', JSON.stringify(payload, null, 2));
 
     switch (event) {
+      case 'order.paid':
+      case 'subscription.active':
+        // Handle successful payment
+        await handleOrderPaid(payload.data);
+        break;
+      
       case 'checkout.created':
       case 'checkout.updated':
       case 'order.created':
-        await handleCheckoutCompleted(payload.data);
+        // These are just informational, don't update subscription yet
+        console.log('Informational event, waiting for payment confirmation');
         break;
       
       case 'subscription.created':
@@ -45,6 +52,51 @@ export async function POST(request) {
       { error: 'Webhook handler failed' },
       { status: 500 }
     );
+  }
+}
+
+async function handleOrderPaid(data) {
+  console.log('=== ORDER PAID EVENT ===');
+  console.log('Order data:', JSON.stringify(data, null, 2));
+  
+  const { customer, subscription } = data;
+  
+  // Get user_id and plan from customer.metadata
+  const userId = customer?.metadata?.user_id;
+  const plan = customer?.metadata?.plan;
+  
+  console.log('Customer metadata:', customer?.metadata);
+  console.log('User ID:', userId, 'Plan:', plan);
+  
+  if (!userId || !plan) {
+    console.error('Missing user_id or plan in customer.metadata');
+    console.error('Full customer object:', JSON.stringify(customer, null, 2));
+    return;
+  }
+
+  const generationsLimit = plan === 'pro' ? 30 : 100;
+
+  // Update user subscription
+  const { data: updatedData, error } = await supabase
+    .from('user_subscriptions')
+    .update({
+      plan: plan,
+      generations_limit: generationsLimit,
+      generations_used: 0,
+      polar_customer_id: customer.id,
+      polar_subscription_id: subscription?.id || null,
+      subscription_status: 'active',
+      current_period_start: subscription?.current_period_start || null,
+      current_period_end: subscription?.current_period_end || null,
+    })
+    .eq('user_id', userId)
+    .select();
+
+  if (error) {
+    console.error('Error updating subscription:', error);
+  } else {
+    console.log('✅ Subscription updated successfully!');
+    console.log('Updated data:', updatedData);
   }
 }
 
