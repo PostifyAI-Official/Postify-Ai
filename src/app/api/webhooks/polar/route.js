@@ -12,9 +12,12 @@ export async function POST(request) {
     const event = payload.type;
 
     console.log('Polar webhook received:', event);
+    console.log('Full payload:', JSON.stringify(payload, null, 2));
 
     switch (event) {
-      case 'checkout.completed':
+      case 'checkout.created':
+      case 'checkout.updated':
+      case 'order.created':
         await handleCheckoutCompleted(payload.data);
         break;
       
@@ -27,6 +30,7 @@ export async function POST(request) {
         break;
       
       case 'subscription.canceled':
+      case 'subscription.revoked':
         await handleSubscriptionCanceled(payload.data);
         break;
 
@@ -45,14 +49,19 @@ export async function POST(request) {
 }
 
 async function handleCheckoutCompleted(data) {
-  const { customer, metadata, subscription } = data;
+  const { customer, subscription } = data;
   
-  if (!metadata?.user_id || !metadata?.plan) {
-    console.error('Missing user_id or plan in metadata');
+  // Get user_id and plan from customer.metadata
+  const userId = customer?.metadata?.user_id;
+  const plan = customer?.metadata?.plan;
+  
+  console.log('Customer metadata:', customer?.metadata);
+  
+  if (!userId || !plan) {
+    console.error('Missing user_id or plan in customer.metadata');
     return;
   }
 
-  const plan = metadata.plan;
   const generationsLimit = plan === 'pro' ? 30 : 100;
 
   // Update user subscription
@@ -65,24 +74,29 @@ async function handleCheckoutCompleted(data) {
       polar_customer_id: customer.id,
       polar_subscription_id: subscription?.id || null,
       subscription_status: 'active',
-      current_period_start: subscription?.currentPeriodStart || null,
-      current_period_end: subscription?.currentPeriodEnd || null,
+      current_period_start: subscription?.current_period_start || null,
+      current_period_end: subscription?.current_period_end || null,
     })
-    .eq('user_id', metadata.user_id);
+    .eq('user_id', userId);
 
   if (error) {
     console.error('Error updating subscription:', error);
   } else {
-    console.log('Subscription updated successfully for user:', metadata.user_id);
+    console.log('Subscription updated successfully for user:', userId);
   }
 }
 
 async function handleSubscriptionCreated(data) {
-  const { customer, metadata } = data;
+  const { customer } = data;
   
-  if (!metadata?.user_id) return;
+  const userId = customer?.metadata?.user_id;
+  const plan = customer?.metadata?.plan;
+  
+  if (!userId || !plan) {
+    console.error('Missing user_id or plan in customer.metadata');
+    return;
+  }
 
-  const plan = metadata.plan;
   const generationsLimit = plan === 'pro' ? 30 : 100;
 
   await supabase
@@ -92,31 +106,41 @@ async function handleSubscriptionCreated(data) {
       generations_limit: generationsLimit,
       polar_subscription_id: data.id,
       subscription_status: 'active',
-      current_period_start: data.currentPeriodStart,
-      current_period_end: data.currentPeriodEnd,
+      current_period_start: data.current_period_start,
+      current_period_end: data.current_period_end,
     })
-    .eq('user_id', metadata.user_id);
+    .eq('user_id', userId);
 }
 
 async function handleSubscriptionUpdated(data) {
-  const { metadata } = data;
+  const { customer } = data;
   
-  if (!metadata?.user_id) return;
+  const userId = customer?.metadata?.user_id;
+  
+  if (!userId) {
+    console.error('Missing user_id in customer.metadata');
+    return;
+  }
 
   await supabase
     .from('user_subscriptions')
     .update({
       subscription_status: data.status,
-      current_period_start: data.currentPeriodStart,
-      current_period_end: data.currentPeriodEnd,
+      current_period_start: data.current_period_start,
+      current_period_end: data.current_period_end,
     })
-    .eq('user_id', metadata.user_id);
+    .eq('user_id', userId);
 }
 
 async function handleSubscriptionCanceled(data) {
-  const { metadata } = data;
+  const { customer } = data;
   
-  if (!metadata?.user_id) return;
+  const userId = customer?.metadata?.user_id;
+  
+  if (!userId) {
+    console.error('Missing user_id in customer.metadata');
+    return;
+  }
 
   // Downgrade to free plan
   await supabase
@@ -127,5 +151,5 @@ async function handleSubscriptionCanceled(data) {
       subscription_status: 'canceled',
       polar_subscription_id: null,
     })
-    .eq('user_id', metadata.user_id);
+    .eq('user_id', userId);
 }
