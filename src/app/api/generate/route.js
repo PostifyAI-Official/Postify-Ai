@@ -31,10 +31,10 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Failed to check subscription' }, { status: 500 });
     }
 
-    // Check if user has reached their limit (only for paid plans)
-    if (subscription.plan !== 'free' && subscription.generations_used >= subscription.generations_limit) {
+    // Check if user has reached their limit
+    if (subscription.generations_used >= subscription.generations_limit) {
       return NextResponse.json(
-        { error: 'Generation limit reached. Please upgrade your plan or wait for next billing cycle.' },
+        { error: `Generation limit reached (${subscription.generations_limit} per month). Please upgrade your plan.` },
         { status: 403 }
       );
     }

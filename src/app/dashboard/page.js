@@ -156,14 +156,13 @@ export default function Dashboard() {
                     {subscription.plan === 'free' ? 'Free' : 'Active'}
                   </span>
                 </div>
-                {subscription.plan !== 'free' ? (
-                  <p className="text-zinc-700">
-                    <span className="font-semibold">{subscription.generations_used}</span> of{' '}
-                    <span className="font-semibold">{subscription.generations_limit}</span> generations used this month
-                  </p>
-                ) : (
-                  <p className="text-zinc-700">
-                    Upgrade to unlock AI content generation
+                <p className="text-zinc-700">
+                  <span className="font-semibold">{subscription.generations_used}</span> of{' '}
+                  <span className="font-semibold">{subscription.generations_limit}</span> generations used this month
+                </p>
+                {subscription.plan === 'free' && (
+                  <p className="text-sm text-zinc-600 mt-1">
+                    Upgrade to get more generations: Pro (30) or Business (100)
                   </p>
                 )}
               </div>
