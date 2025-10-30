@@ -60,9 +60,16 @@ export async function POST(request) {
       } catch (polarError) {
         // If subscription is already canceled/scheduled for cancellation, that's okay
         // We'll proceed to downgrade the user anyway
-        console.log('Polar cancellation response:', polarError.body$ || polarError.message);
+        console.log('Polar cancellation error:', JSON.stringify(polarError, null, 2));
         
-        if (polarError.body$ && polarError.body$.includes('AlreadyCanceledSubscription')) {
+        // Check various ways the error might be structured
+        const errorBody = polarError.body$ || polarError.body || polarError.message || '';
+        const errorString = typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody);
+        const isAlreadyCanceled = 
+          errorString.includes('AlreadyCanceledSubscription') || 
+          polarError.error === 'AlreadyCanceledSubscription';
+        
+        if (isAlreadyCanceled) {
           console.log('⚠️ Subscription already canceled in Polar, proceeding to downgrade user...');
         } else {
           // If it's a different error, throw it
