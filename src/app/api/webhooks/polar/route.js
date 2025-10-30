@@ -59,22 +59,50 @@ async function handleOrderPaid(data) {
   console.log('=== ORDER PAID EVENT ===');
   console.log('Order data:', JSON.stringify(data, null, 2));
   
-  const { customer, subscription } = data;
+  const { customer, subscription, product } = data;
   
-  // Get user_id and plan from customer.metadata
-  const userId = customer?.metadata?.user_id;
-  const plan = customer?.metadata?.plan;
+  // Get customer email
+  const customerEmail = customer?.email;
   
-  console.log('Customer metadata:', customer?.metadata);
-  console.log('User ID:', userId, 'Plan:', plan);
-  
-  if (!userId || !plan) {
-    console.error('Missing user_id or plan in customer.metadata');
-    console.error('Full customer object:', JSON.stringify(customer, null, 2));
+  if (!customerEmail) {
+    console.error('❌ No customer email found');
     return;
+  }
+  
+  console.log('Customer email:', customerEmail);
+  
+  // Find user in Supabase by email
+  const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+  
+  if (authError) {
+    console.error('❌ Error fetching users:', authError);
+    return;
+  }
+  
+  const user = authData.users.find(u => u.email === customerEmail);
+  
+  if (!user) {
+    console.error('❌ No user found with email:', customerEmail);
+    return;
+  }
+  
+  console.log('✅ Found user:', user.id);
+  
+  // Determine plan from product name
+  let plan = 'pro'; // default
+  if (product?.name) {
+    const productName = product.name.toLowerCase();
+    if (productName.includes('business')) {
+      plan = 'business';
+    } else if (productName.includes('pro')) {
+      plan = 'pro';
+    }
+    console.log('Product name:', product.name, '-> Plan:', plan);
   }
 
   const generationsLimit = plan === 'pro' ? 30 : 100;
+  
+  console.log(`Updating user ${user.id} to ${plan} plan (${generationsLimit} generations)`);
 
   // Update user subscription
   const { data: updatedData, error } = await supabase
@@ -89,11 +117,11 @@ async function handleOrderPaid(data) {
       current_period_start: subscription?.current_period_start || null,
       current_period_end: subscription?.current_period_end || null,
     })
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .select();
 
   if (error) {
-    console.error('Error updating subscription:', error);
+    console.error('❌ Error updating subscription:', error);
   } else {
     console.log('✅ Subscription updated successfully!');
     console.log('Updated data:', updatedData);
@@ -139,14 +167,41 @@ async function handleCheckoutCompleted(data) {
 }
 
 async function handleSubscriptionCreated(data) {
-  const { customer } = data;
+  console.log('=== SUBSCRIPTION CREATED EVENT ===');
   
-  const userId = customer?.metadata?.user_id;
-  const plan = customer?.metadata?.plan;
+  const { customer, product } = data;
   
-  if (!userId || !plan) {
-    console.error('Missing user_id or plan in customer.metadata');
+  const customerEmail = customer?.email;
+  
+  if (!customerEmail) {
+    console.error('❌ No customer email found');
     return;
+  }
+  
+  // Find user by email
+  const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+  
+  if (authError) {
+    console.error('❌ Error fetching users:', authError);
+    return;
+  }
+  
+  const user = authData.users.find(u => u.email === customerEmail);
+  
+  if (!user) {
+    console.error('❌ No user found with email:', customerEmail);
+    return;
+  }
+  
+  // Determine plan from product name
+  let plan = 'pro';
+  if (product?.name) {
+    const productName = product.name.toLowerCase();
+    if (productName.includes('business')) {
+      plan = 'business';
+    } else if (productName.includes('pro')) {
+      plan = 'pro';
+    }
   }
 
   const generationsLimit = plan === 'pro' ? 30 : 100;
@@ -161,7 +216,9 @@ async function handleSubscriptionCreated(data) {
       current_period_start: data.current_period_start,
       current_period_end: data.current_period_end,
     })
-    .eq('user_id', userId);
+    .eq('user_id', user.id);
+    
+  console.log('✅ Subscription created for user:', user.id, 'Plan:', plan);
 }
 
 async function handleSubscriptionUpdated(data) {
