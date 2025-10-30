@@ -57,17 +57,17 @@ export default function Dashboard() {
       const data = await response.json();
       
       if (response.ok) {
-        if (data.url) {
-          // New subscription - redirect to checkout
-          window.location.href = data.url;
+        // Both endpoints now return checkout URL
+        if (data.checkoutUrl || data.url) {
+          window.location.href = data.checkoutUrl || data.url;
         } else if (data.success) {
-          // Plan changed successfully - refresh page
           alert(`Successfully changed to ${plan.toUpperCase()} plan!`);
           fetchSubscription();
         }
       } else {
-        if (data.error === 'polar_conflict') {
-          alert('Unable to change plan automatically. Please contact support to switch plans.');
+        if (data.requiresCheckout && (data.checkoutUrl || data.url)) {
+          // Even on error, if checkout URL is provided, redirect
+          window.location.href = data.checkoutUrl || data.url;
         } else {
           alert(data.message || 'Failed to change plan');
         }

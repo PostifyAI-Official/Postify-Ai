@@ -38,7 +38,8 @@ export async function POST(request) {
     if (!subscription || !subscription.polar_subscription_id || subscription.plan === 'free') {
       return NextResponse.json({ 
         error: 'no_active_subscription',
-        message: 'Please use checkout to subscribe'
+        message: 'Please use checkout to subscribe',
+        requiresCheckout: true
       }, { status: 400 });
     }
 
@@ -48,56 +49,48 @@ export async function POST(request) {
       : process.env.NEXT_PUBLIC_POLAR_BUSINESS_MONTHLY_ID;
 
     try {
-      // Update the subscription in Polar using the correct method
-      const updatedSubscription = await polar.subscriptions.update(
-        subscription.polar_subscription_id,
-        {
-          product_id: newProductId,
-        }
-      );
+      // Step 1: Cancel the current subscription in Polar
+      console.log('Canceling current subscription:', subscription.polar_subscription_id);
+      await polar.subscriptions.revoke(subscription.polar_subscription_id);
 
-      console.log('Polar subscription updated:', updatedSubscription);
+      // Step 2: Create a new checkout session for the new plan
+      console.log('Creating new checkout session for plan:', plan);
+      const checkout = await polar.checkouts.create({
+        productId: newProductId,
+        customerEmail: user.email,
+      });
 
-      // Update the local database
-      const generationsLimit = plan === 'pro' ? 30 : 100;
+      // Step 3: Update the local database to mark transition
       const { error: updateError } = await supabase
         .from('user_subscriptions')
         .update({
-          plan: plan,
-          generations_limit: generationsLimit,
-          // Reset generations if upgrading from Pro to Business
-          generations_used: (plan === 'business' && subscription.plan === 'pro') ? 0 : subscription.generations_used,
+          polar_subscription_id: null, // Will be updated after new checkout
+          plan: 'free', // Temporary until new subscription is active
+          status: 'transitioning',
         })
         .eq('user_id', user.id);
 
       if (updateError) {
         console.error('Error updating local subscription:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update subscription' },
-          { status: 500 }
-        );
       }
 
+      // Return the checkout URL for the new plan
       return NextResponse.json({ 
         success: true,
-        message: 'Plan updated successfully',
-        newPlan: plan
+        message: 'Please complete the checkout to activate your new plan',
+        checkoutUrl: checkout.url,
+        requiresCheckout: true
       });
 
     } catch (polarError) {
       console.error('Polar API error:', polarError);
       
-      // If it's a "subscription already exists" error, try canceling and creating new
-      if (polarError.message && polarError.message.includes('already has an active subscription')) {
-        return NextResponse.json({
-          error: 'polar_conflict',
-          message: 'Please cancel your current subscription first, then subscribe to the new plan.',
-          currentSubscriptionId: subscription.polar_subscription_id
-        }, { status: 409 });
-      }
-
       return NextResponse.json(
-        { error: 'Failed to update subscription with payment provider' },
+        { 
+          error: 'Failed to change plan',
+          message: polarError.message || 'An error occurred while changing your plan',
+          details: polarError
+        },
         { status: 500 }
       );
     }
