@@ -24,13 +24,14 @@ export async function POST(request) {
       ? process.env.NEXT_PUBLIC_POLAR_PRO_MONTHLY_ID 
       : process.env.NEXT_PUBLIC_POLAR_BUSINESS_MONTHLY_ID;
 
-    // Create checkout session
+    // Create checkout session with external_customer_id
+    // This will be available as customer.external_id in webhooks
     const checkout = await polar.checkouts.create({
       products: [productId],
       customerEmail: user.email,
+      externalCustomerId: user.id, // THIS is the key! Polar will return this in webhooks
       customerMetadata: {
-        user_id: user.id,
-        plan: plan,
+        plan: plan, // Also keep plan in metadata
       },
       successUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard?checkout=success`,
     });

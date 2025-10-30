@@ -67,46 +67,55 @@ async function handleOrderPaid(data) {
   
   const { customer, subscription, product } = data;
   
-  // Get customer email
-  const customerEmail = customer?.email;
+  // Get user_id from customer.external_id (this is what we set in checkout!)
+  const userId = customer?.external_id;
   
-  if (!customerEmail) {
-    console.error('❌ No customer email found');
+  if (!userId) {
+    console.error('❌ No external_id found on customer');
+    console.error('Customer:', JSON.stringify(customer, null, 2));
     return;
   }
   
-  console.log('🔍 Looking for user with email:', customerEmail);
+  console.log('✅ Found user_id from external_id:', userId);
   
-  // Determine plan from product name
-  let plan = 'pro'; // default
-  if (product?.name) {
+  // Determine plan from product name or metadata
+  let plan = customer?.metadata?.plan || 'pro';
+  if (!customer?.metadata?.plan && product?.name) {
     const productName = product.name.toLowerCase();
     if (productName.includes('business')) {
       plan = 'business';
     } else if (productName.includes('pro')) {
       plan = 'pro';
     }
-    console.log('📦 Product name:', product.name, '-> Plan:', plan);
   }
+  
+  console.log('📦 Plan:', plan);
 
   const generationsLimit = plan === 'pro' ? 30 : 100;
   
-  console.log(`📝 Updating subscription for ${customerEmail} to ${plan} plan (${generationsLimit} generations)`);
+  console.log(`📝 Updating user ${userId} to ${plan} plan (${generationsLimit} generations)`);
 
-  // Use Supabase RPC function to update by email
-  const { data: rpcData, error: rpcError } = await supabase.rpc('update_subscription_by_email', {
-    p_email: customerEmail,
-    p_plan: plan,
-    p_generations_limit: generationsLimit,
-    p_polar_customer_id: customer.id,
-    p_polar_subscription_id: subscription?.id || null
-  });
+  // Update user subscription directly
+  const { data: updatedData, error } = await supabase
+    .from('user_subscriptions')
+    .update({
+      plan: plan,
+      generations_limit: generationsLimit,
+      generations_used: 0,
+      subscription_status: 'active',
+      polar_customer_id: customer.id,
+      polar_subscription_id: subscription?.id || null,
+      current_period_start: subscription?.current_period_start || null,
+      current_period_end: subscription?.current_period_end || null,
+    })
+    .eq('user_id', userId)
+    .select();
 
-  if (rpcError) {
-    console.error('❌ RPC Error:', rpcError);
-    console.error('This means the database function is missing. Create it in Supabase SQL Editor.');
+  if (error) {
+    console.error('❌ Error updating subscription:', error);
   } else {
-    console.log('✅✅✅ Subscription updated successfully via RPC!');
+    console.log('✅✅✅ Subscription updated successfully!');
+    console.log('Updated data:', updatedData);
   }
 }
 
