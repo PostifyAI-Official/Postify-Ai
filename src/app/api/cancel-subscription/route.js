@@ -48,21 +48,56 @@ export async function POST(request) {
       // Cancel the subscription in Polar using UPDATE method with revoke flag
       console.log('Canceling subscription:', subscription.polar_subscription_id);
       
-      await polar.subscriptions.update({
-        id: subscription.polar_subscription_id,
-        subscriptionUpdate: {
-          revoke: true,
-        },
-      });
+      try {
+        await polar.subscriptions.update({
+          id: subscription.polar_subscription_id,
+          subscriptionUpdate: {
+            revoke: true,
+          },
+        });
 
-      console.log('✅ Subscription canceled in Polar, waiting for webhook to update database...');
+        console.log('✅ Subscription canceled in Polar');
+      } catch (polarError) {
+        // If subscription is already canceled/scheduled for cancellation, that's okay
+        // We'll proceed to downgrade the user anyway
+        console.log('Polar cancellation response:', polarError.body$ || polarError.message);
+        
+        if (polarError.body$ && polarError.body$.includes('AlreadyCanceledSubscription')) {
+          console.log('⚠️ Subscription already canceled in Polar, proceeding to downgrade user...');
+        } else {
+          // If it's a different error, throw it
+          throw polarError;
+        }
+      }
 
-      // Don't update the database here - let the webhook handle it to avoid race conditions
-      // The webhook will receive the cancellation event and downgrade to free
+      // Immediately downgrade to free plan in our database
+      console.log('📝 Downgrading user to free plan...');
+      const { error: updateError } = await supabase
+        .from('user_subscriptions')
+        .update({
+          polar_subscription_id: null,
+          plan: 'free',
+          generations_limit: 0,
+          generations_used: 0,
+          subscription_status: 'canceled',
+          current_period_start: null,
+          current_period_end: null,
+        })
+        .eq('user_id', user.id);
+
+      if (updateError) {
+        console.error('Error updating local subscription:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update subscription' },
+          { status: 500 }
+        );
+      }
+
+      console.log('✅✅✅ User successfully downgraded to free plan!');
 
       return NextResponse.json({ 
         success: true,
-        message: 'Your subscription has been canceled. You will be downgraded to the free plan.'
+        message: 'Your subscription has been canceled. You have been downgraded to the free plan.'
       });
 
     } catch (polarError) {
