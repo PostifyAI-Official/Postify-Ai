@@ -76,8 +76,8 @@ export default function Home() {
 
       {/* Hero Section - Enhanced */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 border-b border-zinc-100 bg-gradient-to-b from-emerald-50/30 to-white" style={{
-        backgroundImage: 'radial-gradient(circle, rgb(16 185 129 / 0.15) 1px, transparent 1px)',
-        backgroundSize: '20px 20px'
+        backgroundImage: 'radial-gradient(circle, rgb(16 185 129 / 0.2) 2px, transparent 2px)',
+        backgroundSize: '30px 30px'
       }}>
         <div className="max-w-5xl mx-auto relative z-10">
           {/* Badge */}
