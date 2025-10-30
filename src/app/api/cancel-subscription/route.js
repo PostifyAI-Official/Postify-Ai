@@ -13,12 +13,6 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { plan } = await request.json();
-
-    if (!plan || !['pro', 'business'].includes(plan)) {
-      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
-    }
-
     // Get user's current subscription
     const { data: subscription, error: subError } = await supabase
       .from('user_subscriptions')
@@ -34,52 +28,50 @@ export async function POST(request) {
       );
     }
 
-    // If user doesn't have an active subscription, redirect to checkout
+    // Check if user has a paid subscription to cancel
     if (!subscription || !subscription.polar_subscription_id || subscription.plan === 'free') {
       return NextResponse.json({ 
         error: 'no_active_subscription',
-        message: 'Please use checkout to subscribe',
-        requiresCheckout: true
+        message: 'You do not have an active paid subscription to cancel'
       }, { status: 400 });
     }
 
-    // Get the new product ID
-    const newProductId = plan === 'pro' 
-      ? process.env.NEXT_PUBLIC_POLAR_PRO_MONTHLY_ID 
-      : process.env.NEXT_PUBLIC_POLAR_BUSINESS_MONTHLY_ID;
+    // Only allow canceling Pro or Business plans
+    if (!['pro', 'business'].includes(subscription.plan)) {
+      return NextResponse.json({ 
+        error: 'invalid_plan',
+        message: 'Invalid subscription plan'
+      }, { status: 400 });
+    }
 
     try {
-      // Step 1: Cancel the current subscription in Polar
-      console.log('Canceling current subscription:', subscription.polar_subscription_id);
+      // Cancel the subscription in Polar
+      console.log('Canceling subscription:', subscription.polar_subscription_id);
       await polar.subscriptions.revoke(subscription.polar_subscription_id);
 
-      // Step 2: Create a new checkout session for the new plan
-      console.log('Creating new checkout session for plan:', plan);
-      const checkout = await polar.checkouts.create({
-        productId: newProductId,
-        customerEmail: user.email,
-      });
-
-      // Step 3: Update the local database to mark transition
+      // Update the local database to downgrade to free plan
       const { error: updateError } = await supabase
         .from('user_subscriptions')
         .update({
-          polar_subscription_id: null, // Will be updated after new checkout
-          plan: 'free', // Temporary until new subscription is active
-          status: 'transitioning',
+          polar_subscription_id: null,
+          plan: 'free',
+          generations_limit: 0,
+          generations_used: 0,
+          status: 'canceled',
         })
         .eq('user_id', user.id);
 
       if (updateError) {
         console.error('Error updating local subscription:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update subscription' },
+          { status: 500 }
+        );
       }
 
-      // Return the checkout URL for the new plan
       return NextResponse.json({ 
         success: true,
-        message: 'Please complete the checkout to activate your new plan',
-        checkoutUrl: checkout.url,
-        requiresCheckout: true
+        message: 'Your subscription has been canceled. You have been downgraded to the free plan.'
       });
 
     } catch (polarError) {
@@ -87,15 +79,14 @@ export async function POST(request) {
       
       return NextResponse.json(
         { 
-          error: 'Failed to change plan',
-          message: polarError.message || 'An error occurred while changing your plan',
-          details: polarError
+          error: 'Failed to cancel subscription',
+          message: polarError.message || 'An error occurred while canceling your subscription'
         },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error('Plan change error:', error);
+    console.error('Cancel subscription error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

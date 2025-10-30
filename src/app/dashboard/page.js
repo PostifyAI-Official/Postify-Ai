@@ -38,15 +38,7 @@ export default function Dashboard() {
 
   const handleUpgrade = async (plan) => {
     try {
-      // Check if user has an active paid subscription
-      const hasActiveSubscription = subscription && 
-        subscription.plan !== 'free' && 
-        subscription.polar_subscription_id;
-
-      // Use different endpoint based on whether they have active subscription
-      const endpoint = hasActiveSubscription ? '/api/change-plan' : '/api/checkout';
-      
-      const response = await fetch(endpoint, {
+      const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,25 +48,41 @@ export default function Dashboard() {
 
       const data = await response.json();
       
-      if (response.ok) {
-        // Both endpoints now return checkout URL
-        if (data.checkoutUrl || data.url) {
-          window.location.href = data.checkoutUrl || data.url;
-        } else if (data.success) {
-          alert(`Successfully changed to ${plan.toUpperCase()} plan!`);
-          fetchSubscription();
-        }
+      if (response.ok && data.url) {
+        window.location.href = data.url;
       } else {
-        if (data.requiresCheckout && (data.checkoutUrl || data.url)) {
-          // Even on error, if checkout URL is provided, redirect
-          window.location.href = data.checkoutUrl || data.url;
-        } else {
-          alert(data.message || 'Failed to change plan');
-        }
+        alert(data.message || 'Failed to start checkout');
       }
     } catch (error) {
-      console.error('Plan change error:', error);
+      console.error('Checkout error:', error);
       alert('An error occurred');
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!confirm('Are you sure you want to cancel your subscription? You will be downgraded to the free plan immediately.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        alert(data.message || 'Your subscription has been canceled successfully!');
+        fetchSubscription();
+      } else {
+        alert(data.message || 'Failed to cancel subscription');
+      }
+    } catch (error) {
+      console.error('Cancel subscription error:', error);
+      alert('An error occurred while canceling your subscription');
     }
   };
 
@@ -209,19 +217,27 @@ export default function Dashboard() {
                   </>
                 )}
                 {subscription.plan === 'pro' && (
-                  <button
-                    onClick={() => handleUpgrade('business')}
-                    className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
-                  >
-                    Upgrade to Business - $30/mo
-                  </button>
+                  <>
+                    <button
+                      onClick={() => handleUpgrade('business')}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
+                    >
+                      Upgrade to Business - $30/mo
+                    </button>
+                    <button
+                      onClick={handleCancelSubscription}
+                      className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition"
+                    >
+                      Cancel Subscription
+                    </button>
+                  </>
                 )}
                 {subscription.plan === 'business' && (
                   <button
-                    onClick={() => handleUpgrade('pro')}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+                    onClick={handleCancelSubscription}
+                    className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition"
                   >
-                    Change to Pro - $5/mo (30 generations)
+                    Cancel Subscription
                   </button>
                 )}
               </div>
