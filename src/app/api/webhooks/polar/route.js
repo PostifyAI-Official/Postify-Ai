@@ -3,7 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
 );
 
 export async function POST(request) {
@@ -69,24 +75,25 @@ async function handleOrderPaid(data) {
     return;
   }
   
-  console.log('Customer email:', customerEmail);
+  console.log('🔍 Looking for user with email:', customerEmail);
   
-  // Find user in Supabase by email
-  const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+  // Use Supabase Admin API to get user by email
+  const { data: userData, error: userError } = await supabase.auth.admin.listUsers();
   
-  if (authError) {
-    console.error('❌ Error fetching users:', authError);
+  if (userError) {
+    console.error('❌ Error listing users:', userError);
     return;
   }
   
-  const user = authData.users.find(u => u.email === customerEmail);
+  const user = userData.users.find(u => u.email === customerEmail);
   
   if (!user) {
     console.error('❌ No user found with email:', customerEmail);
     return;
   }
   
-  console.log('✅ Found user:', user.id);
+  const userId = user.id;
+  console.log('✅ Found user:', userId);
   
   // Determine plan from product name
   let plan = 'pro'; // default
@@ -97,12 +104,12 @@ async function handleOrderPaid(data) {
     } else if (productName.includes('pro')) {
       plan = 'pro';
     }
-    console.log('Product name:', product.name, '-> Plan:', plan);
+    console.log('📦 Product name:', product.name, '-> Plan:', plan);
   }
 
   const generationsLimit = plan === 'pro' ? 30 : 100;
   
-  console.log(`Updating user ${user.id} to ${plan} plan (${generationsLimit} generations)`);
+  console.log(`📝 Updating user ${userId} to ${plan} plan (${generationsLimit} generations)`);
 
   // Update user subscription
   const { data: updatedData, error } = await supabase
@@ -117,13 +124,13 @@ async function handleOrderPaid(data) {
       current_period_start: subscription?.current_period_start || null,
       current_period_end: subscription?.current_period_end || null,
     })
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .select();
 
   if (error) {
     console.error('❌ Error updating subscription:', error);
   } else {
-    console.log('✅ Subscription updated successfully!');
+    console.log('✅✅✅ Subscription updated successfully!');
     console.log('Updated data:', updatedData);
   }
 }
