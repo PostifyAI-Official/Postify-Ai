@@ -75,8 +75,11 @@ export default function Home() {
       <Navbar />
 
       {/* Hero Section - Enhanced */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 border-b border-zinc-100">
-        <div className="max-w-5xl mx-auto">
+      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 border-b border-zinc-100 bg-gradient-to-b from-emerald-50/30 to-white" style={{
+        backgroundImage: 'radial-gradient(circle, rgb(16 185 129 / 0.15) 1px, transparent 1px)',
+        backgroundSize: '20px 20px'
+      }}>
+        <div className="max-w-5xl mx-auto relative z-10">
           {/* Badge */}
           <div className="flex justify-center mb-8">
             <span className="inline-block bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-sm font-semibold border border-emerald-200">
