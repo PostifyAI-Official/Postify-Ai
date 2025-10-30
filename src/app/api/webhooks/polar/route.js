@@ -77,24 +77,6 @@ async function handleOrderPaid(data) {
   
   console.log('🔍 Looking for user with email:', customerEmail);
   
-  // Use Supabase Admin API to get user by email
-  const { data: userData, error: userError } = await supabase.auth.admin.listUsers();
-  
-  if (userError) {
-    console.error('❌ Error listing users:', userError);
-    return;
-  }
-  
-  const user = userData.users.find(u => u.email === customerEmail);
-  
-  if (!user) {
-    console.error('❌ No user found with email:', customerEmail);
-    return;
-  }
-  
-  const userId = user.id;
-  console.log('✅ Found user:', userId);
-  
   // Determine plan from product name
   let plan = 'pro'; // default
   if (product?.name) {
@@ -109,29 +91,22 @@ async function handleOrderPaid(data) {
 
   const generationsLimit = plan === 'pro' ? 30 : 100;
   
-  console.log(`📝 Updating user ${userId} to ${plan} plan (${generationsLimit} generations)`);
+  console.log(`📝 Updating subscription for ${customerEmail} to ${plan} plan (${generationsLimit} generations)`);
 
-  // Update user subscription
-  const { data: updatedData, error } = await supabase
-    .from('user_subscriptions')
-    .update({
-      plan: plan,
-      generations_limit: generationsLimit,
-      generations_used: 0,
-      polar_customer_id: customer.id,
-      polar_subscription_id: subscription?.id || null,
-      subscription_status: 'active',
-      current_period_start: subscription?.current_period_start || null,
-      current_period_end: subscription?.current_period_end || null,
-    })
-    .eq('user_id', userId)
-    .select();
+  // Use Supabase RPC function to update by email
+  const { data: rpcData, error: rpcError } = await supabase.rpc('update_subscription_by_email', {
+    p_email: customerEmail,
+    p_plan: plan,
+    p_generations_limit: generationsLimit,
+    p_polar_customer_id: customer.id,
+    p_polar_subscription_id: subscription?.id || null
+  });
 
-  if (error) {
-    console.error('❌ Error updating subscription:', error);
+  if (rpcError) {
+    console.error('❌ RPC Error:', rpcError);
+    console.error('This means the database function is missing. Create it in Supabase SQL Editor.');
   } else {
-    console.log('✅✅✅ Subscription updated successfully!');
-    console.log('Updated data:', updatedData);
+    console.log('✅✅✅ Subscription updated successfully via RPC!');
   }
 }
 
