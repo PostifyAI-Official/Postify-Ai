@@ -22,7 +22,11 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2 group">
-            <div className="w-8 h-8 bg-emerald-600 rounded-lg group-hover:bg-emerald-700 transition"></div>
+            <img 
+              src="/logo.png" 
+              alt="Postify Logo" 
+              className="w-8 h-8 object-contain"
+            />
             <span className="text-xl font-bold text-black">Postify</span>
           </Link>
 
