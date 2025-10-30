@@ -47,7 +47,9 @@ export async function POST(request) {
     try {
       // Cancel the subscription in Polar
       console.log('Canceling subscription:', subscription.polar_subscription_id);
-      await polar.subscriptions.revoke(subscription.polar_subscription_id);
+      await polar.subscriptions.revoke({
+        id: subscription.polar_subscription_id,
+      });
 
       // Update the local database to downgrade to free plan
       const { error: updateError } = await supabase
