@@ -48,11 +48,13 @@ export async function POST(request) {
       : process.env.NEXT_PUBLIC_POLAR_BUSINESS_MONTHLY_ID;
 
     try {
-      // Update the subscription in Polar
-      const updatedSubscription = await polar.subscriptions.update({
-        id: subscription.polar_subscription_id,
-        productId: newProductId,
-      });
+      // Update the subscription in Polar using the correct method
+      const updatedSubscription = await polar.subscriptions.update(
+        subscription.polar_subscription_id,
+        {
+          product_id: newProductId,
+        }
+      );
 
       console.log('Polar subscription updated:', updatedSubscription);
 
