@@ -213,23 +213,66 @@ async function handleSubscriptionCreated(data) {
 }
 
 async function handleSubscriptionUpdated(data) {
-  const { customer } = data;
+  console.log('=== SUBSCRIPTION UPDATED EVENT ===');
+  console.log('Subscription data:', JSON.stringify(data, null, 2));
   
-  const userId = customer?.metadata?.user_id;
+  const { customer, product } = data;
+  
+  // Try to get user_id from external_id first, then metadata
+  const userId = customer?.external_id || customer?.metadata?.user_id;
   
   if (!userId) {
-    console.error('Missing user_id in customer.metadata');
+    console.error('❌ No user_id found in external_id or metadata');
     return;
   }
 
-  await supabase
-    .from('user_subscriptions')
-    .update({
-      subscription_status: data.status,
-      current_period_start: data.current_period_start,
-      current_period_end: data.current_period_end,
-    })
-    .eq('user_id', userId);
+  console.log('✅ Found user_id:', userId);
+
+  // Check if product changed (plan change)
+  if (product) {
+    let plan = 'pro';
+    const productName = product.name?.toLowerCase() || '';
+    
+    if (productName.includes('business')) {
+      plan = 'business';
+    } else if (productName.includes('pro')) {
+      plan = 'pro';
+    }
+    
+    const generationsLimit = plan === 'pro' ? 30 : 100;
+    
+    console.log(`📦 Plan changed to: ${plan} (${generationsLimit} generations)`);
+    
+    // Update with new plan and limits
+    const { error } = await supabase
+      .from('user_subscriptions')
+      .update({
+        plan: plan,
+        generations_limit: generationsLimit,
+        subscription_status: data.status,
+        current_period_start: data.current_period_start,
+        current_period_end: data.current_period_end,
+        // Reset generations count on plan change
+        generations_used: 0,
+      })
+      .eq('user_id', userId);
+      
+    if (error) {
+      console.error('❌ Error updating subscription:', error);
+    } else {
+      console.log('✅ Subscription updated with new plan');
+    }
+  } else {
+    // Just update status/period without changing plan
+    await supabase
+      .from('user_subscriptions')
+      .update({
+        subscription_status: data.status,
+        current_period_start: data.current_period_start,
+        current_period_end: data.current_period_end,
+      })
+      .eq('user_id', userId);
+  }
 }
 
 async function handleSubscriptionCanceled(data) {

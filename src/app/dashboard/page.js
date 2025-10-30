@@ -38,7 +38,15 @@ export default function Dashboard() {
 
   const handleUpgrade = async (plan) => {
     try {
-      const response = await fetch('/api/checkout', {
+      // Check if user has an active paid subscription
+      const hasActiveSubscription = subscription && 
+        subscription.plan !== 'free' && 
+        subscription.polar_subscription_id;
+
+      // Use different endpoint based on whether they have active subscription
+      const endpoint = hasActiveSubscription ? '/api/change-plan' : '/api/checkout';
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,13 +55,25 @@ export default function Dashboard() {
       });
 
       const data = await response.json();
-      if (response.ok && data.url) {
-        window.location.href = data.url;
+      
+      if (response.ok) {
+        if (data.url) {
+          // New subscription - redirect to checkout
+          window.location.href = data.url;
+        } else if (data.success) {
+          // Plan changed successfully - refresh page
+          alert(`Successfully changed to ${plan.toUpperCase()} plan!`);
+          fetchSubscription();
+        }
       } else {
-        alert('Failed to create checkout session');
+        if (data.error === 'polar_conflict') {
+          alert('Unable to change plan automatically. Please contact support to switch plans.');
+        } else {
+          alert(data.message || 'Failed to change plan');
+        }
       }
     } catch (error) {
-      console.error('Checkout error:', error);
+      console.error('Plan change error:', error);
       alert('An error occurred');
     }
   };
@@ -165,8 +185,13 @@ export default function Dashboard() {
                     Upgrade to get more generations: Pro (30) or Business (100)
                   </p>
                 )}
+                {subscription.plan === 'business' && subscription.generations_used >= subscription.generations_limit && (
+                  <p className="text-sm text-orange-600 mt-1 font-medium">
+                    ⚠️ You've reached your monthly limit. Consider switching plans or wait for next month's reset.
+                  </p>
+                )}
               </div>
-              <div className="flex space-x-3">
+              <div className="flex flex-wrap gap-3">
                 {subscription.plan === 'free' && (
                   <>
                     <button
@@ -189,6 +214,14 @@ export default function Dashboard() {
                     className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
                   >
                     Upgrade to Business - $30/mo
+                  </button>
+                )}
+                {subscription.plan === 'business' && (
+                  <button
+                    onClick={() => handleUpgrade('pro')}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+                  >
+                    Change to Pro - $5/mo (30 generations)
                   </button>
                 )}
               </div>
