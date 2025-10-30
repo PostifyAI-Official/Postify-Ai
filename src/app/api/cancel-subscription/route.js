@@ -45,35 +45,24 @@ export async function POST(request) {
     }
 
     try {
-      // Cancel the subscription in Polar
+      // Cancel the subscription in Polar using UPDATE method with revoke flag
       console.log('Canceling subscription:', subscription.polar_subscription_id);
-      await polar.subscriptions.revoke({
+      
+      await polar.subscriptions.update({
         id: subscription.polar_subscription_id,
+        subscriptionUpdate: {
+          revoke: true,
+        },
       });
 
-      // Update the local database to downgrade to free plan
-      const { error: updateError } = await supabase
-        .from('user_subscriptions')
-        .update({
-          polar_subscription_id: null,
-          plan: 'free',
-          generations_limit: 0,
-          generations_used: 0,
-          status: 'canceled',
-        })
-        .eq('user_id', user.id);
+      console.log('✅ Subscription canceled in Polar, waiting for webhook to update database...');
 
-      if (updateError) {
-        console.error('Error updating local subscription:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update subscription' },
-          { status: 500 }
-        );
-      }
+      // Don't update the database here - let the webhook handle it to avoid race conditions
+      // The webhook will receive the cancellation event and downgrade to free
 
       return NextResponse.json({ 
         success: true,
-        message: 'Your subscription has been canceled. You have been downgraded to the free plan.'
+        message: 'Your subscription has been canceled. You will be downgraded to the free plan.'
       });
 
     } catch (polarError) {

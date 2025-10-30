@@ -216,7 +216,7 @@ async function handleSubscriptionUpdated(data) {
   console.log('=== SUBSCRIPTION UPDATED EVENT ===');
   console.log('Subscription data:', JSON.stringify(data, null, 2));
   
-  const { customer, product } = data;
+  const { customer, product, status } = data;
   
   // Try to get user_id from external_id first, then metadata
   const userId = customer?.external_id || customer?.metadata?.user_id;
@@ -227,6 +227,13 @@ async function handleSubscriptionUpdated(data) {
   }
 
   console.log('✅ Found user_id:', userId);
+  console.log('📊 Subscription status:', status);
+
+  // If subscription is being canceled, let the canceled webhook handle it
+  if (status === 'canceled' || data.cancel_at_period_end) {
+    console.log('⚠️ Subscription is being canceled, skipping update');
+    return;
+  }
 
   // Check if product changed (plan change)
   if (product) {
@@ -249,7 +256,7 @@ async function handleSubscriptionUpdated(data) {
       .update({
         plan: plan,
         generations_limit: generationsLimit,
-        subscription_status: data.status,
+        subscription_status: status || 'active',
         current_period_start: data.current_period_start,
         current_period_end: data.current_period_end,
         // Reset generations count on plan change
@@ -267,32 +274,53 @@ async function handleSubscriptionUpdated(data) {
     await supabase
       .from('user_subscriptions')
       .update({
-        subscription_status: data.status,
+        subscription_status: status || 'active',
         current_period_start: data.current_period_start,
         current_period_end: data.current_period_end,
       })
       .eq('user_id', userId);
+      
+    console.log('✅ Subscription status/period updated');
   }
 }
 
 async function handleSubscriptionCanceled(data) {
+  console.log('=== SUBSCRIPTION CANCELED/REVOKED EVENT ===');
+  console.log('Subscription data:', JSON.stringify(data, null, 2));
+  
   const { customer } = data;
   
-  const userId = customer?.metadata?.user_id;
+  // Try to get user_id from external_id first (this is what we use), then metadata
+  const userId = customer?.external_id || customer?.metadata?.user_id;
   
   if (!userId) {
-    console.error('Missing user_id in customer.metadata');
+    console.error('❌ No user_id found in external_id or metadata');
+    console.error('Customer:', JSON.stringify(customer, null, 2));
     return;
   }
 
+  console.log('✅ Found user_id:', userId);
+  console.log('📝 Downgrading to free plan...');
+
   // Downgrade to free plan
-  await supabase
+  const { data: updatedData, error } = await supabase
     .from('user_subscriptions')
     .update({
       plan: 'free',
       generations_limit: 0,
+      generations_used: 0,
       subscription_status: 'canceled',
       polar_subscription_id: null,
+      current_period_start: null,
+      current_period_end: null,
     })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .select();
+
+  if (error) {
+    console.error('❌ Error canceling subscription:', error);
+  } else {
+    console.log('✅✅✅ Subscription canceled successfully! User downgraded to free.');
+    console.log('Updated data:', updatedData);
+  }
 }
