@@ -103,15 +103,12 @@ export default function Home() {
           </div>
 
           {/* Hero Image/Preview */}
-          <div className="rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50 shadow-md">
-            <div className="aspect-video flex items-center justify-center">
-              <div className="text-center">
-                <svg className="w-16 h-16 mx-auto mb-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 0a10 10 0 1 0 20 0 10 10 0 0 0-20 0zm3.7 11L8.3 8.3A1 1 0 0 0 7 9.7v6.6a1 1 0 0 0 1.5.9l7-4.7a1 1 0 0 0 0-1.8z" transform="translate(-5 0)"/>
-                </svg>
-                <p className="text-zinc-500 font-medium">AI Content Generator in Action</p>
-              </div>
-            </div>
+          <div className="rounded-xl overflow-hidden border border-zinc-200 shadow-2xl">
+            <img 
+              src="/banner.webp" 
+              alt="AI Content Generator - Postify AI Circuit Board Banner" 
+              className="w-full h-auto object-cover"
+            />
           </div>
 
           {/* Trust Badges */}
