@@ -12,7 +12,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user subscription
+    // Get user subscription with optimized query
     const { data: subscription, error } = await supabase
       .from('user_subscriptions')
       .select('*')
@@ -27,7 +27,14 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ subscription });
+    // Return with no-cache headers to ensure fresh data
+    return NextResponse.json({ subscription }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      }
+    });
   } catch (error) {
     console.error('Subscription fetch error:', error);
     return NextResponse.json(

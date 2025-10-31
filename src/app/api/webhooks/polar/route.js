@@ -95,10 +95,11 @@ async function handleOrderPaid(data) {
   
   console.log(`📝 Updating user ${userId} to ${plan} plan (${generationsLimit} generations)`);
 
-  // Update user subscription directly
+  // Update user subscription directly with upsert for faster response
   const { data: updatedData, error } = await supabase
     .from('user_subscriptions')
-    .update({
+    .upsert({
+      user_id: userId,
       plan: plan,
       generations_limit: generationsLimit,
       generations_used: 0,
@@ -107,8 +108,11 @@ async function handleOrderPaid(data) {
       polar_subscription_id: subscription?.id || null,
       current_period_start: subscription?.current_period_start || null,
       current_period_end: subscription?.current_period_end || null,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'user_id',
+      returning: 'representation'
     })
-    .eq('user_id', userId)
     .select();
 
   if (error) {
@@ -250,19 +254,24 @@ async function handleSubscriptionUpdated(data) {
     
     console.log(`📦 Plan changed to: ${plan} (${generationsLimit} generations)`);
     
-    // Update with new plan and limits
+    // Update with new plan and limits - use upsert for faster response
     const { error } = await supabase
       .from('user_subscriptions')
-      .update({
+      .upsert({
+        user_id: userId,
         plan: plan,
         generations_limit: generationsLimit,
         subscription_status: status || 'active',
         current_period_start: data.current_period_start,
         current_period_end: data.current_period_end,
+        polar_subscription_id: data.id,
         // Reset generations count on plan change
         generations_used: 0,
-      })
-      .eq('user_id', userId);
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id',
+        returning: 'minimal'
+      });
       
     if (error) {
       console.error('❌ Error updating subscription:', error);
@@ -277,6 +286,7 @@ async function handleSubscriptionUpdated(data) {
         subscription_status: status || 'active',
         current_period_start: data.current_period_start,
         current_period_end: data.current_period_end,
+        updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId);
       
@@ -302,10 +312,11 @@ async function handleSubscriptionCanceled(data) {
   console.log('✅ Found user_id:', userId);
   console.log('📝 Downgrading to free plan...');
 
-  // Downgrade to free plan
+  // Downgrade to free plan with upsert for faster response
   const { data: updatedData, error } = await supabase
     .from('user_subscriptions')
-    .update({
+    .upsert({
+      user_id: userId,
       plan: 'free',
       generations_limit: 0,
       generations_used: 0,
@@ -313,8 +324,11 @@ async function handleSubscriptionCanceled(data) {
       polar_subscription_id: null,
       current_period_start: null,
       current_period_end: null,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'user_id',
+      returning: 'representation'
     })
-    .eq('user_id', userId)
     .select();
 
   if (error) {

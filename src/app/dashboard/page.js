@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 
 export default function Dashboard() {
@@ -15,11 +16,43 @@ export default function Dashboard() {
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const supabase = createClient();
+  const subscriptionChannelRef = useRef(null);
 
+  // Setup real-time subscription listener
   useEffect(() => {
-    if (user) {
-      fetchSubscription();
-    }
+    if (!user) return;
+
+    // Initial fetch
+    fetchSubscription();
+
+    // Subscribe to real-time changes
+    subscriptionChannelRef.current = supabase
+      .channel('subscription-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_subscriptions',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Real-time subscription update:', payload);
+          // Update local state immediately
+          if (payload.new) {
+            setSubscription(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup on unmount
+    return () => {
+      if (subscriptionChannelRef.current) {
+        supabase.removeChannel(subscriptionChannelRef.current);
+      }
+    };
   }, [user]);
 
   const fetchSubscription = async () => {
@@ -37,6 +70,15 @@ export default function Dashboard() {
   };
 
   const handleUpgrade = async (plan) => {
+    // Optimistically update UI to show upgrading state
+    const previousSubscription = subscription;
+    setSubscription({
+      ...subscription,
+      plan: plan,
+      generations_limit: plan === 'pro' ? 30 : 100,
+      subscription_status: 'pending',
+    });
+
     try {
       const response = await fetch('/api/checkout', {
         method: 'POST',
@@ -49,12 +91,17 @@ export default function Dashboard() {
       const data = await response.json();
       
       if (response.ok && data.url) {
+        // Redirect to checkout - subscription will be updated via webhook
         window.location.href = data.url;
       } else {
+        // Revert optimistic update on error
+        setSubscription(previousSubscription);
         alert(data.message || 'Failed to start checkout');
       }
     } catch (error) {
       console.error('Checkout error:', error);
+      // Revert optimistic update on error
+      setSubscription(previousSubscription);
       alert('An error occurred');
     }
   };
@@ -63,6 +110,15 @@ export default function Dashboard() {
     if (!confirm('Are you sure you want to cancel your subscription? You will be downgraded to the free plan immediately.')) {
       return;
     }
+
+    // Optimistically update UI to show free plan immediately
+    const previousSubscription = subscription;
+    setSubscription({
+      ...subscription,
+      plan: 'free',
+      generations_limit: 0,
+      subscription_status: 'canceled',
+    });
 
     try {
       const response = await fetch('/api/cancel-subscription', {
@@ -76,12 +132,17 @@ export default function Dashboard() {
       
       if (response.ok) {
         alert(data.message || 'Your subscription has been canceled successfully!');
-        fetchSubscription();
+        // Fetch fresh data to ensure consistency
+        await fetchSubscription();
       } else {
+        // Revert optimistic update on error
+        setSubscription(previousSubscription);
         alert(data.message || 'Failed to cancel subscription');
       }
     } catch (error) {
       console.error('Cancel subscription error:', error);
+      // Revert optimistic update on error
+      setSubscription(previousSubscription);
       alert('An error occurred while canceling your subscription');
     }
   };
